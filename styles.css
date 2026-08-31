@@ -25,4 +25,3 @@
 .saved-record .report-delete{border:0;border-left:1px solid #e2e8eb;background:#fff;color:#a54444;width:44px;font-size:20px;cursor:pointer}
 .saved-record .report-delete:hover{background:#fff5f5}
 @media(max-width:620px){.report-name-grid{grid-template-columns:1fr}.saved-record-main{padding:12px}.saved-record-main strong{white-space:normal}}
-.cloud-actions{margin:24px 16px 8px;display:grid;gap:9px}.cloud-actions .generate{margin:0;width:100%}.cloud-button{background:#176d9a}.cloud-button:disabled{opacity:.6}

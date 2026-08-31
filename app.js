@@ -10,7 +10,7 @@ function METER_BLOCKS(){return meterTitles();}
 const newBlock = (title = '') => ({ id: newId(), title, photos: [], gas: '', water: '' });
 const newMeterGroups = () => meterTitles().map(title => newBlock(title));
 const defaultSettings = () => { const c=typeof blexoConfig==='function'?blexoConfig():{}; return { watermark:c.watermark!==false, template:c.checkPhotoTemplate||c.photoTemplate||'two', company:'', sealConfig:c.sealConfig||DEFAULT_SEAL_CONFIG }; };
-const blankReport = () => ({ id: newId(), name: 'Novo relatório', reportDate: new Date().toISOString().slice(0,10), reference: new Date().toISOString().slice(0,7), client: '', location: '', service: '', technician: '', notes: '', settings: defaultSettings(), groups: newMeterGroups(), updatedAt: new Date().toISOString() });
+const blankReport = () => ({ id: newId(), name: 'Novo relatório', client: '', location: '', service: '', technician: '', notes: '', settings: defaultSettings(), groups: newMeterGroups(), updatedAt: new Date().toISOString() });
 
 function openDatabase() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, 1); request.onupgradeneeded = () => request.result.createObjectStore(STORE, { keyPath: 'id' }); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 async function withStore(mode, work) { const db = await openDatabase(); return new Promise((resolve, reject) => { const transaction = db.transaction(STORE, mode), result = work(transaction.objectStore(STORE)); transaction.oncomplete = () => { db.close(); resolve(result); }; transaction.onerror = () => { db.close(); reject(transaction.error); }; }); }
@@ -25,7 +25,7 @@ function settings() { return currentReport.settings; }
 function renderModuleColors(){}
 function saveModuleColors(){}
 function ensureReportShape(report) {
-  report.reportDate ||= new Date(report.updatedAt || Date.now()).toISOString().slice(0,10); report.reference ||= report.reportDate.slice(0,7); report.settings = { ...defaultSettings(), ...(report.settings || {}) };
+  report.settings = { ...defaultSettings(), ...(report.settings || {}) };
   const oldGroups = Array.isArray(report.groups) ? report.groups : [];
   const byTitle = new Map(oldGroups.map(group => [group.title, group]));
   report.groups = meterTitles().map((title, index) => {
@@ -46,26 +46,8 @@ function ensureReportShape(report) {
 }
 function scheduleSave(message = 'Salvo neste aparelho') { clearTimeout(saveTimer); saveTimer = setTimeout(async () => { currentReport.updatedAt = new Date().toISOString(); await saveReport(currentReport); $('feedback').textContent = message; }, 350); }
 function sealOptions() { return settings().sealConfig.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => { const [label, kind = 'texto', color = '#123047'] = line.split('|').map(part => part.trim()); return { label, kind: kind.toLowerCase() === 'bolinha' ? 'dot' : 'text', color: /^#[0-9a-f]{6}$/i.test(color) ? color : '#123047' }; }).filter(option => option.label); }
-function syncFields() { currentReport.reportDate = $('reportDate')?.value || currentReport.reportDate || new Date().toISOString().slice(0,10); currentReport.reference = $('reference')?.value || currentReport.reportDate.slice(0,7); ['reportName', 'client', 'location', 'service', 'technician', 'notes'].forEach(id => { currentReport[id === 'reportName' ? 'name' : id] = $(id).value.trim(); }); currentReport.settings = { watermark: $('watermark').checked, template: $('photoTemplate').value, company: $('company').value.trim(), sealConfig: $('sealConfig').value.trim() || DEFAULT_SEAL_CONFIG }; $('reportHeading').textContent = currentReport.name || 'Novo relatório'; }
-function renderReport() { const r = ensureReportShape(currentReport); ['reportName', 'client', 'location', 'service', 'technician', 'notes'].forEach(id => { $(id).value = r[id === 'reportName' ? 'name' : id] || ''; }); if($('reportDate')) $('reportDate').value=r.reportDate||''; if($('reference')) $('reference').value=r.reference||''; $('watermark').checked = r.settings.watermark; $('photoTemplate').value = r.settings.template; $('company').value = r.settings.company; $('sealConfig').value = r.settings.sealConfig; $('reportHeading').textContent = r.name || 'Novo relatório'; renderBlocks(); }
-
-async function sendToCloud(){
-  if(!window.BlexoCloud) throw new Error('Integração com o banco não carregada.');
-  await saveNow();
-  $('feedback').textContent='Enviando leituras para o banco…';
-  const synced=await BlexoCloud.syncLeiturista(currentReport);
-  const cycleIds=Object.values(synced.cycles||{});
-  const pdf=window.__blexoLastPdfReportId===currentReport.id && window.__blexoLastPdfBlob instanceof Blob ? window.__blexoLastPdfBlob : null;
-  if(!pdf && countReportPhotos(currentReport)) throw new Error('Gere o PDF de evidências antes de enviar ao banco.');
-  for(let i=0;i<cycleIds.length;i++){
-    const cycleId=cycleIds[i];
-    const utility = synced.cycles.gas===cycleId?'gas':'water';
-    const photos=currentReport.groups.flatMap(g=>(g.photos||[]).filter(p=>p.meter===utility).map(p=>({...p,blockCode:g.title})));
-    await BlexoCloud.uploadEvidence(cycleId,currentReport,i===0?pdf:null,photos);
-  }
-  $('feedback').textContent='✓ Leituras e evidências enviadas ao banco. Agora o fechamento é feito no Adm-Rateio.';
-  return synced;
-}
+function syncFields() { ['reportName', 'client', 'location', 'service', 'technician', 'notes'].forEach(id => { currentReport[id === 'reportName' ? 'name' : id] = $(id).value.trim(); }); currentReport.settings = { watermark: $('watermark').checked, template: $('photoTemplate').value, company: $('company').value.trim(), sealConfig: $('sealConfig').value.trim() || DEFAULT_SEAL_CONFIG }; $('reportHeading').textContent = currentReport.name || 'Novo relatório'; }
+function renderReport() { const r = ensureReportShape(currentReport); ['reportName', 'client', 'location', 'service', 'technician', 'notes'].forEach(id => { $(id).value = r[id === 'reportName' ? 'name' : id] || ''; }); $('watermark').checked = r.settings.watermark; $('photoTemplate').value = r.settings.template; $('company').value = r.settings.company; $('sealConfig').value = r.settings.sealConfig; $('reportHeading').textContent = r.name || 'Novo relatório'; renderBlocks(); }
 function findGroup(id) { return currentReport.groups.find(group => group.id === id); }
 function photoPicker(group, photo, photoIndex) { const options = sealOptions(); return `<article class="photo"><img src="${photo.src}" alt="Foto ${photoIndex + 1}"><span class="tag">${escapeHtml(group.title || 'Evidência')}</span><select class="seal-picker" data-seal="${group.id}:${photo.id}" aria-label="Selo da foto"><option value="">Selo</option>${options.map(option => `<option value="${escapeHtml(option.label)}" ${photo.seal === option.label ? 'selected' : ''}>${option.kind === 'dot' ? '● ' : ''}${escapeHtml(option.label)}</option>`).join('')}</select><button class="remove" data-remove-photo="${group.id}:${photo.id}" aria-label="Excluir foto">×</button><textarea class="photo-note" data-note="${group.id}:${photo.id}" placeholder="Observação desta foto">${escapeHtml(photo.note)}</textarea></article>`; }
 function renderBlocks() {
@@ -208,7 +190,7 @@ async function addFiles(groupId, source, fileList, meter = '') {
       const image = await decodePhoto(file);
       const normalized = normalizePhoto(image, 1280);
       const src = drawWatermark(normalized, watermarkText);
-      group.photos.push({ id: newId(), src, insertedAt, watermarkText, meter, blockCode: group.title, seal: '', note: '' });
+      group.photos.push({ id: newId(), src, insertedAt, watermarkText, meter, seal: '', note: '' });
       renderBlocks();
       await saveNow();
       $('feedback').textContent = '✓ Foto adicionada e salva neste aparelho.';
@@ -380,17 +362,14 @@ function generatePdf() {
   drawReadingsTable(doc, currentReport.groups);
 
   const safe = (currentReport.name || 'relatorio').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
-  const pdfBlob = doc.output('blob');
-  window.__blexoLastPdfBlob = pdfBlob; window.__blexoLastPdfReportId = currentReport.id;
   doc.save(`blexo-check-${safe}.pdf`);
   saveNow();
   $('feedback').textContent = 'PDF gerado e download iniciado.';
-  return pdfBlob;
 }
 
 ['reportName', 'client', 'location', 'service', 'technician', 'notes'].forEach(id => $(id).addEventListener('input', () => { syncFields(); scheduleSave(); }));
 $('newReportButton').onclick = async () => { await saveNow(); currentReport = blankReport(); await saveNow(); renderReport(); $('feedback').textContent = 'Novo relatório criado neste aparelho.'; };
-$('reportsButtonInline').onclick = openReports; if($('sendCloudButton')) $('sendCloudButton').onclick = async()=>{ const b=$('sendCloudButton'); b.disabled=true; try{ if(window.__blexoLastPdfReportId!==currentReport.id || !(window.__blexoLastPdfBlob instanceof Blob)) await generatePdf(); await sendToCloud(); }catch(e){ console.error('Blexo Cloud:',e); $('feedback').textContent='Falha no envio: '+(e?.message||'erro desconhecido'); }finally{ b.disabled=false; } };  $('settingsButton').onclick = () => { renderModuleColors(); $('settingsDialog').showModal(); }; document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => $(button.dataset.close).close()); $('settingsDialog').addEventListener('close', () => { if ($('settingsDialog').returnValue !== 'cancel') { saveModuleColors(); syncFields(); renderBlocks(); scheduleSave(); } }); $('generateButton').onclick = generatePdf;
+$('reportsButtonInline').onclick = openReports; $('settingsButton').onclick = () => { renderModuleColors(); $('settingsDialog').showModal(); }; document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => $(button.dataset.close).close()); $('settingsDialog').addEventListener('close', () => { if ($('settingsDialog').returnValue !== 'cancel') { saveModuleColors(); syncFields(); renderBlocks(); scheduleSave(); } }); $('generateButton').onclick = generatePdf;
 window.addEventListener('online', setOnlineStatus); window.addEventListener('offline', setOnlineStatus);
 (async () => { const reports = await getAllReports(); currentReport = ensureReportShape(reports.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0] || blankReport()); if (!reports.length) await saveReport(currentReport); renderReport(); setOnlineStatus(); })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
